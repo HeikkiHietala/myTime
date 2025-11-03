@@ -1,36 +1,45 @@
 #include "myTime.h"
+#include <lwip/apps/sntp.h>
 
 myTime::myTime() {
     _timezone = "UTC";
     _ntpServer = "pool.ntp.org";
-    _updateInterval = 3600000; // 1 hour
+    _updateInterval = 3600000;
     _lastUpdate = 0;
     _offsetSeconds = 0;
     _ntpInitialized = false;
+    _useFixedOffset = false;
 }
 
 void myTime::initializeNTP() {
     if (!_ntpInitialized) {
-        Serial.println("Initializing NTP...");
-        // Configure with GMT offset 0 and DST offset 0 for UTC
-        configTime(0, 0, _ntpServer.c_str());
+        sntp_setoperatingmode(SNTP_OPMODE_POLL);
+        sntp_setservername(0, _ntpServer.c_str());
+        sntp_init();
         _ntpInitialized = true;
-        delay(1000);  // Give it a moment to start
     }
 }
 
 void myTime::setTimeZone(const String& tz) {
     _timezone = tz;
-    // Recalculate offset immediately if we have valid time
+    _useFixedOffset = false;
     time_t now = time(nullptr);
-    if (now > 946684800) {  // After year 2000
+    if (now > 946684800) {
         _offsetSeconds = calculateTimezoneOffset(_timezone, now);
     }
 }
 
+void myTime::setFixedOffset(int seconds) {
+    _offsetSeconds = seconds;
+    _useFixedOffset = true;
+}
+
 void myTime::setNtpServer(const String& server) {
+    if (_ntpInitialized) {
+        sntp_stop();
+        _ntpInitialized = false;
+    }
     _ntpServer = server;
-    _ntpInitialized = false;  // Force reinitialization with new server
 }
 
 void myTime::setUpdateInterval(unsigned long intervalMs) {
@@ -39,37 +48,21 @@ void myTime::setUpdateInterval(unsigned long intervalMs) {
 
 bool myTime::updateFromNTP() {
     initializeNTP();
-    
-    Serial.print("Syncing time");
-    
-    // Wait for valid time (not 1970)
-    int retries = 40;  // Increased retries
+    int retries = 20;
     time_t now;
-    
-    while (retries > 0) {
+
+    while (retries-- > 0) {
         now = time(nullptr);
-        if (now > 946684800) {  // After year 2000 - we got valid time!
-            break;
+        if (now > 946684800) {
+            _lastUpdate = millis();
+            if (!_useFixedOffset) {
+                _offsetSeconds = calculateTimezoneOffset(_timezone, now);
+            }
+            return true;
         }
-        Serial.print(".");
         delay(500);
-        retries--;
     }
-    
-    if (now < 946684800) {
-        Serial.println(" Failed!");
-        Serial.println("Check your NTP server or network connection");
-        return false;
-    }
-    
-    Serial.println(" Success!");
-    Serial.printf("Got time: %ld\n", now);
-    _lastUpdate = millis();
-    
-    // Calculate timezone offset
-    _offsetSeconds = calculateTimezoneOffset(_timezone, now);
-    
-    return true;
+    return false;
 }
 
 void myTime::loopUpdate() {
@@ -79,45 +72,13 @@ void myTime::loopUpdate() {
 }
 
 int myTime::calculateTimezoneOffset(const String& tz, time_t utcTime) {
-    // Handle custom offsets like "Asia/Kolkata+5:30"
-    int plusIndex = tz.indexOf('+');
-    int minusIndex = tz.indexOf('-');
-    
-    if (plusIndex > 0 || minusIndex > 0) {
-        int index = (plusIndex > 0) ? plusIndex : minusIndex;
-        String offsetStr = tz.substring(index);
-        
-        int colon = offsetStr.indexOf(':');
-        if (colon >= 0) {
-            int hours = offsetStr.substring(0, colon).toInt();
-            int minutes = offsetStr.substring(colon + 1).toInt();
-            return hours * 3600 + (hours >= 0 ? minutes : -minutes) * 60;
-        } else {
-            return offsetStr.toInt() * 3600;
-        }
-    }
-    
-    // Standard timezone offsets
     String tzName = tz;
     tzName.toLowerCase();
-    
-    // Basic offsets for common timezones
+
     if (tzName == "utc") return 0;
     if (tzName == "europe/helsinki") return 7200 + (isDST(tz, utcTime) ? 3600 : 0);
-    if (tzName == "europe/paris") return 3600 + (isDST(tz, utcTime) ? 3600 : 0);
     if (tzName == "europe/london") return 0 + (isDST(tz, utcTime) ? 3600 : 0);
-    if (tzName == "europe/berlin") return 3600 + (isDST(tz, utcTime) ? 3600 : 0);
-    if (tzName == "europe/moscow") return 10800;
     if (tzName == "america/new_york") return -18000 + (isDST(tz, utcTime) ? 3600 : 0);
-    if (tzName == "america/los_angeles") return -28800 + (isDST(tz, utcTime) ? 3600 : 0);
-    if (tzName == "asia/tokyo") return 32400;
-    if (tzName == "asia/shanghai") return 28800;
-    if (tzName == "asia/kolkata") return 19800;
-    if (tzName == "australia/sydney") return 36000 + (isDST(tz, utcTime) ? 3600 : 0);
-    if (tzName == "pacific/auckland") return 43200 + (isDST(tz, utcTime) ? 3600 : 0);
-    if (tzName == "america/sao_paulo") return -10800 + (isDST(tz, utcTime) ? 3600 : 0);
-    if (tzName == "africa/johannesburg") return 7200;
-    
     return 0;
 }
 
@@ -125,77 +86,28 @@ bool myTime::isDST(const String& tz, time_t utcTime) {
     struct tm* timeinfo = gmtime(&utcTime);
     int month = timeinfo->tm_mon + 1;
     int day = timeinfo->tm_mday;
-    
+
     String tzName = tz;
     tzName.toLowerCase();
-    
-    // Europe (last Sunday March to last Sunday October)
+
     if (tzName.startsWith("europe/")) {
         if (month > 3 && month < 10) return true;
         if (month < 3 || month > 10) return false;
         if (month == 3) return day >= 25;
         if (month == 10) return day < 25;
     }
-    
-    // US (second Sunday March to first Sunday November)
-    if (tzName.startsWith("america/") && 
-        (tzName.indexOf("new_york") >= 0 || tzName.indexOf("los_angeles") >= 0)) {
-        if (month > 3 && month < 11) return true;
-        if (month < 3 || month > 11) return false;
-        if (month == 3) return day >= 8;
-        if (month == 11) return day < 7;
-    }
-    
-    // Australia (first Sunday October to first Sunday April)
-    if (tzName == "australia/sydney") {
-        if (month > 10 || month < 4) return true;
-        if (month > 4 && month < 10) return false;
-        if (month == 10) return day >= 1;
-        if (month == 4) return day < 7;
-    }
-    
+
     return false;
 }
 
-int myTime::Y() {
-    time_t now = time(nullptr) + _offsetSeconds;
-    struct tm* t = gmtime(&now);
-    return t->tm_year + 1900;
-}
+int myTime::Y() { time_t now = time(nullptr) + _offsetSeconds; return gmtime(&now)->tm_year + 1900; }
+int myTime::Mon() { time_t now = time(nullptr) + _offsetSeconds; return gmtime(&now)->tm_mon + 1; }
+int myTime::D() { time_t now = time(nullptr) + _offsetSeconds; return gmtime(&now)->tm_mday; }
+int myTime::H() { time_t now = time(nullptr) + _offsetSeconds; return gmtime(&now)->tm_hour; }
+int myTime::M() { time_t now = time(nullptr) + _offsetSeconds; return gmtime(&now)->tm_min; }
+int myTime::S() { time_t now = time(nullptr) + _offsetSeconds; return gmtime(&now)->tm_sec; }
 
-int myTime::Mon() {
-    time_t now = time(nullptr) + _offsetSeconds;
-    struct tm* t = gmtime(&now);
-    return t->tm_mon + 1;
-}
-
-int myTime::D() {
-    time_t now = time(nullptr) + _offsetSeconds;
-    struct tm* t = gmtime(&now);
-    return t->tm_mday;
-}
-
-int myTime::H() {
-    time_t now = time(nullptr) + _offsetSeconds;
-    struct tm* t = gmtime(&now);
-    return t->tm_hour;
-}
-
-int myTime::M() {
-    time_t now = time(nullptr) + _offsetSeconds;
-    struct tm* t = gmtime(&now);
-    return t->tm_min;
-}
-
-int myTime::S() {
-    time_t now = time(nullptr) + _offsetSeconds;
-    struct tm* t = gmtime(&now);
-    return t->tm_sec;
-}
-
-time_t myTime::timestamp() {
-    return time(nullptr) + _offsetSeconds;
-}
+time_t myTime::timestamp() { return time(nullptr) + _offsetSeconds; }
 
 String myTime::formatted() {
     char buf[9];
