@@ -13,7 +13,7 @@ void myTime::parseTimeZone(const String& tz) {
     int plusIndex = tz.indexOf('+');
     int minusIndex = tz.indexOf('-');
     int index = (plusIndex > 0) ? plusIndex : minusIndex;
-
+    
     if (index > 0) {
         // Split IANA and offset
         _timezone = tz.substring(0, index);
@@ -46,25 +46,36 @@ void myTime::setUpdateInterval(unsigned long intervalMs) {
 }
 
 void myTime::updateFromNTP() {
-    // Configure NTP + timezone
+    Serial.println("Contacting NTP server...");
     configTzTime(_timezone.c_str(), _ntpServer.c_str());
-
+    
     struct tm timeinfo;
-    int retries = 10;
-    while (!getLocalTime(&timeinfo) && retries > 0) {
-        delay(200);
+    int retries = 30;  // Increased retries
+    bool success = false;
+    
+    while (retries > 0) {
+        if (getLocalTime(&timeinfo)) {
+            time_t tempTime = mktime(&timeinfo);
+            // Check if we got a valid time (not epoch 0 = 1970)
+            if (tempTime > 946684800) {  // Jan 1, 2000 as minimum valid time
+                _timestamp = tempTime;
+                // apply optional offset
+                if (_offsetHours != 0.0) {
+                    _timestamp += (time_t)(_offsetHours * 3600);
+                }
+                _lastUpdate = millis();
+                success = true;
+                Serial.println("Time synchronized successfully!");
+                break;
+            }
+        }
+        Serial.print(".");
+        delay(500);  // Increased delay
         retries--;
     }
-
-    if (retries > 0) {
-        _timestamp = mktime(&timeinfo);
-        // apply optional offset
-        if (_offsetHours != 0.0) {
-            _timestamp += (time_t)(_offsetHours * 3600);
-        }
-        _lastUpdate = millis();
-    } else {
-        Serial.println("Failed to get NTP time");
+    
+    if (!success) {
+        Serial.println("\nFailed to get valid NTP time after all retries");
     }
 }
 
