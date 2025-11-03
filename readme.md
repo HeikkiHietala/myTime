@@ -14,10 +14,18 @@ ESP32 Arduino library for NTP-synced, timezone-aware, DST-aware date and time.
 - Built-in convenience list of IANA timezones
 
 ---
+## Access Individual time parts
+
+int year  = clock.Y();
+int month = clock.Mon();
+int day   = clock.D();
+int hour  = clock.H();
+int min   = clock.M();
+int sec   = clock.S();
+
 
 ## Usage Example
 
-```cpp
 #include <WiFi.h>
 #include <myTime.h>
 
