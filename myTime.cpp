@@ -12,9 +12,10 @@ myTime::myTime() {
 void myTime::initializeNTP() {
     if (!_ntpInitialized) {
         Serial.println("Initializing NTP...");
-        // Simple UTC configuration - much faster than configTzTime
+        // Configure with GMT offset 0 and DST offset 0 for UTC
         configTime(0, 0, _ntpServer.c_str());
         _ntpInitialized = true;
+        delay(1000);  // Give it a moment to start
     }
 }
 
@@ -42,22 +43,27 @@ bool myTime::updateFromNTP() {
     Serial.print("Syncing time");
     
     // Wait for valid time (not 1970)
-    int retries = 20;
-    time_t now = time(nullptr);
+    int retries = 40;  // Increased retries
+    time_t now;
     
-    while (now < 946684800 && retries > 0) {  // Before year 2000
+    while (retries > 0) {
+        now = time(nullptr);
+        if (now > 946684800) {  // After year 2000 - we got valid time!
+            break;
+        }
         Serial.print(".");
         delay(500);
-        now = time(nullptr);
         retries--;
     }
     
     if (now < 946684800) {
         Serial.println(" Failed!");
+        Serial.println("Check your NTP server or network connection");
         return false;
     }
     
     Serial.println(" Success!");
+    Serial.printf("Got time: %ld\n", now);
     _lastUpdate = millis();
     
     // Calculate timezone offset
@@ -91,9 +97,7 @@ int myTime::calculateTimezoneOffset(const String& tz, time_t utcTime) {
         }
     }
     
-    // Standard timezone offsets (simplified - doesn't handle all DST rules)
-    // For full DST support, you'd need a timezone database
-    
+    // Standard timezone offsets
     String tzName = tz;
     tzName.toLowerCase();
     
@@ -103,7 +107,7 @@ int myTime::calculateTimezoneOffset(const String& tz, time_t utcTime) {
     if (tzName == "europe/paris") return 3600 + (isDST(tz, utcTime) ? 3600 : 0);
     if (tzName == "europe/london") return 0 + (isDST(tz, utcTime) ? 3600 : 0);
     if (tzName == "europe/berlin") return 3600 + (isDST(tz, utcTime) ? 3600 : 0);
-    if (tzName == "europe/moscow") return 10800;  // No DST since 2014
+    if (tzName == "europe/moscow") return 10800;
     if (tzName == "america/new_york") return -18000 + (isDST(tz, utcTime) ? 3600 : 0);
     if (tzName == "america/los_angeles") return -28800 + (isDST(tz, utcTime) ? 3600 : 0);
     if (tzName == "asia/tokyo") return 32400;
@@ -114,13 +118,10 @@ int myTime::calculateTimezoneOffset(const String& tz, time_t utcTime) {
     if (tzName == "america/sao_paulo") return -10800 + (isDST(tz, utcTime) ? 3600 : 0);
     if (tzName == "africa/johannesburg") return 7200;
     
-    return 0;  // Default to UTC if unknown
+    return 0;
 }
 
 bool myTime::isDST(const String& tz, time_t utcTime) {
-    // Simplified DST detection for common zones
-    // Real implementation would need full timezone database
-    
     struct tm* timeinfo = gmtime(&utcTime);
     int month = timeinfo->tm_mon + 1;
     int day = timeinfo->tm_mday;
@@ -132,7 +133,6 @@ bool myTime::isDST(const String& tz, time_t utcTime) {
     if (tzName.startsWith("europe/")) {
         if (month > 3 && month < 10) return true;
         if (month < 3 || month > 10) return false;
-        // Simplified: just check month boundaries
         if (month == 3) return day >= 25;
         if (month == 10) return day < 25;
     }
