@@ -1,6 +1,6 @@
 # myTime
 
-ESP32 Arduino library for NTP-synced, timezone-aware, DST-aware date and time.
+Lightweight ESP32 Arduino library for NTP-synced, timezone-aware, DST-aware date and time.
 
 ## Features
 
