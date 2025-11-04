@@ -4,7 +4,7 @@
 const char* ssid = "YOUR_WIFI";
 const char* password = "YOUR_PASSWORD";
 
-myTime clock;
+myTime myClock;
 
 void setup() {
   Serial.begin(115200);
@@ -12,9 +12,9 @@ void setup() {
   while (WiFi.status() != WL_CONNECTED) delay(500);
   Serial.println("WiFi connected!");
 
-  clock.setNtpServer("pool.ntp.org");
-  clock.setUpdateInterval(600000); // 10 minutes
-  clock.updateFromNTP();
+  myClock.setNtpServer("pool.ntp.org");
+  myClock.setUpdateInterval(600000); // 10 minutes
+  myClock.updateFromNTP();
 
   Serial.println("=== World Clock ===");
 }
@@ -22,12 +22,12 @@ void setup() {
 void loop() {
   Serial.println();
   for (int i = 0; i < 6; i++) {  // Show first 6 zones for demo
-    clock.setTimeZone(IANATimeZones[i]);
-    clock.updateFromNTP();
+    myClock.setTimeZone(IANATimeZones[i]);
+    myClock.updateFromNTP();
     Serial.printf("%-15s (%s): %s\n", 
       IANATimeZoneCities[i],
       IANATimeZones[i],
-      clock.formattedDateTime().c_str());
+      myClock.formattedDateTime().c_str());
     delay(1000);
   }
   delay(10000);
