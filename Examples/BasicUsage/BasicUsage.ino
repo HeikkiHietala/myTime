@@ -4,7 +4,7 @@
 const char* ssid = "YOUR_WIFI";
 const char* password = "YOUR_PASSWORD";
 
-myTime clock;
+myTime myClock;
 
 void setup() {
   Serial.begin(115200);
@@ -17,21 +17,21 @@ void setup() {
   Serial.println("\nWiFi connected!");
 
   // Configure clock
-  clock.setTimeZone("Europe/Helsinki");    // Use IANA timezone
-  clock.setNtpServer("pool.ntp.org");      // Default NTP server
-  clock.setUpdateInterval(60000);          // Update every 60 seconds
+  myClock.setTimeZone("Europe/Helsinki");    // Use IANA timezone
+  myClock.setNtpServer("pool.ntp.org");      // Default NTP server
+  myClock.setUpdateInterval(60000);          // Update every 60 seconds
 
-  if (clock.updateFromNTP()) {
+  if (myClock.updateFromNTP()) {
     Serial.println("Time synchronized successfully!");
   } else {
     Serial.println("NTP sync failed!");
   }
 
-  Serial.println(clock.formattedDateTime());
+  Serial.println(myClock.formattedDateTime());
 }
 
 void loop() {
-  clock.loopUpdate();  // handles periodic NTP refresh
-  Serial.println(clock.formattedDateTime());
+  myClock.loopUpdate();  // handles periodic NTP refresh
+  Serial.println(myClock.formattedDateTime());
   delay(1000);
 }
