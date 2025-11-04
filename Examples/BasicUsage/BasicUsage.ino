@@ -1,44 +1,37 @@
-/*
- * BasicSync - Simple NTP time synchronization
- * 
- * This example shows the most basic usage of myTime:
- * - Connect to WiFi
- * - Sync with NTP server
- * - Display the current time
- */
-
 #include <WiFi.h>
 #include <myTime.h>
 
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid = "YOUR_WIFI";
+const char* password = "YOUR_PASSWORD";
 
-myTime myClock;
+myTime clock;
 
 void setup() {
-    Serial.begin(115200);
-    Serial.println("\n=== myTime Basic Sync Example ===");
-    
-    // Connect to WiFi
-    Serial.print("Connecting to WiFi");
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println("\nWiFi connected!");
-    
-    // Sync time from NTP (defaults to UTC and pool.ntp.org)
-    Serial.println("Syncing with NTP server...");
-    myClock.updateFromNTP();
-    
-    Serial.println("Time synchronized!");
-    Serial.print("Current UTC time: ");
-    Serial.println(myClock.formattedDateTime());
+  Serial.begin(115200);
+  Serial.println("Connecting to WiFi...");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected!");
+
+  // Configure clock
+  clock.setTimeZone("Europe/Helsinki");    // Use IANA timezone
+  clock.setNtpServer("pool.ntp.org");      // Default NTP server
+  clock.setUpdateInterval(60000);          // Update every 60 seconds
+
+  if (clock.updateFromNTP()) {
+    Serial.println("Time synchronized successfully!");
+  } else {
+    Serial.println("NTP sync failed!");
+  }
+
+  Serial.println(clock.formattedDateTime());
 }
 
 void loop() {
-    // Display time every second
-    Serial.println(myClock.formatted());
-    delay(1000);
+  clock.loopUpdate();  // handles periodic NTP refresh
+  Serial.println(clock.formattedDateTime());
+  delay(1000);
 }
